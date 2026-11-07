@@ -357,12 +357,11 @@ const freshFirst = (qs, s) => { const seen = (s && s.dex) || {}, nw = (q) => !se
 function endlessList(s, avoid, hard) {
   const salt = rid(), out = [], k = todayKey();
   const take = (lv, n) => {
-    const ids = freshFirst(G.POOL[lv], s), used = new Set(out.map((x) => noOf(x[1])));
-    // 同じ回の中では、なるべくまだ出していない国から（使い切ったら同じ国も出す）
-    ids.sort((a, b) => used.has(noOf(a)) - used.has(noOf(b)));
+    const ids = freshFirst(G.POOL[lv], s);
+    // 同じ回の中では、なるべくまだ出していない国から（使い切ったら同じ国も出す。1か国に問題が2つ以上ある難しさもあるので、1問ごとに選び直す）
     for (let c = 0; c < n && ids.length; c++) {
-      const prev = out.length ? out[out.length - 1][1] : avoid, pn = prev && G.QBY[prev] ? noOf(prev) : -1;
-      let j = ids.findIndex((q) => noOf(q) !== pn); if (j < 0) j = 0;
+      const prev = out.length ? out[out.length - 1][1] : avoid, pn = prev && G.QBY[prev] ? noOf(prev) : -1, used = new Set(out.map((x) => noOf(x[1])));
+      let j = ids.findIndex((q) => noOf(q) !== pn && !used.has(noOf(q))); if (j < 0) j = ids.findIndex((q) => noOf(q) !== pn); if (j < 0) j = 0;
       out.push([lv, ids.splice(j, 1)[0]]);
     }
   };
@@ -512,7 +511,7 @@ $("howto").addEventListener("close", () => { if (!load().tut) save((s) => { s.tu
 $("howto-ok").onclick = () => { save((s) => { s.tut = true; }); const d = $("howto"); d.close ? d.close() : d.removeAttribute("open"); };
 
 // 問いの名前（画面の左上の小さな札）
-const KLB = { p: "今のどこ？", d: "五畿七道", k: "昔の国は？", w: "読みから", y: "読みを入れる" };
+const KLB = { p: "今のどこ？", d: "五畿七道", k: "昔の国は？", w: "読みから", y: "読みを入れる", m: "道から国", n: "同じ県の国" };
 
 // ホームの日付が変わったら描き直す（開いたまま0時を過ぎたとき）
 let homeK = null;
@@ -667,8 +666,8 @@ function choose(v) {
     buzz(40);
     cur.wrong.push(v); keep(); paint();
     const msg = $("msg"); msg.className = "msg bad";
-    const o = (P.kd === "k" || P.kd === "w") ? G.KUNI.find((x) => x.nm === P.opts[v]) : null;
-    msg.textContent = o ? `✕ ちがう。${o.nm}は「${o.yomi}」、今の${G.prefName(o.prefs[0])}のあたり。` : "✕ ちがう。";
+    const o = "kwmn".includes(P.kd) ? G.KUNI.find((x) => x.nm === P.opts[v]) : null;
+    msg.textContent = o ? `✕ ちがう。${o.nm}は「${o.yomi}」、${P.kd === "m" ? o.mi + "の国で、" : ""}今の${G.prefName(o.prefs[0])}のあたり。` : "✕ ちがう。";
     return;
   }
   win();

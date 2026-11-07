@@ -22,10 +22,16 @@
   // やさしい：p＝国 → 今の都道府県を4つから／d＝国 → 五畿七道を4つから
   // ふつう：k＝今の都道府県 → そこにあった国を4つから／w＝読み → 国の字を4つから
   // むずかしい：y＝国の字 → 読みを入力する
-  const KIND = { p: 0, d: 0, k: 1, w: 1, y: 2 };
-  const ORDER = ["p", "d", "k", "w", "y"];
+  // 2026-11-07 足した形（最後に足すだけ。id は記録に残る）
+  // ふつう：m＝五畿七道 → その道の国を4つから
+  // むずかしい：n＝国 → 今の同じ都道府県（おもな所）にあった別の国を4つから（同じ県に国が2つ以上ある47か国）
+  const KIND = { p: 0, d: 0, k: 1, w: 1, y: 2, m: 1, n: 2 };
+  const ORDER = ["p", "d", "k", "w", "y", "m", "n"];
   const QS = [], QBY = {}, POOL = [[], [], []];
-  for (const kd of ORDER) for (const k of KUNI) { const id = kd + k.no, q = { id, lv: KIND[kd], kd, no: k.no }; QS.push(q); QBY[id] = q; POOL[q.lv].push(id); }
+  const sibs = (k) => KUNI.filter((x) => x !== k && x.prefs[0] === k.prefs[0]);
+  for (const kd of ORDER) for (const k of KUNI) { if (kd === "n" && !sibs(k).length) continue; const id = kd + k.no, q = { id, lv: KIND[kd], kd, no: k.no }; QS.push(q); QBY[id] = q; POOL[q.lv].push(id); }
+  // n の答え：同じ県の国のうち1つ（問題の id から決まる）
+  const sibOf = (id) => { const k = BY[QBY[id].no], c = sibs(k); return c[Math.floor(rng(seedOf("sib:" + id))() * c.length)]; };
 
   // 同じ道のものを先に（近くの国でまよう）、足りなければほかから
   const nearFirst = (list, k, R) => { const s = shuffled(list, R); return [...s.filter((x) => x.ar === k.ar), ...s.filter((x) => x.ar !== k.ar)]; };
@@ -42,6 +48,12 @@
       pick = [...shuffled(near, R), ...shuffled(far, R)].slice(0, 3).map(prefName);
     } else if (q.kd === "d") {
       ans = k.mi; pick = shuffled(AREAS.filter((a) => a !== k.mi), R).slice(0, 3);
+    } else if (q.kd === "m") {
+      // ほかの道の国だけをまちがいにする
+      ans = k.nm; pick = shuffled(KUNI.filter((x) => x.mi !== k.mi), R).slice(0, 3).map((x) => x.nm);
+    } else if (q.kd === "n") {
+      // 今のその都道府県に少しでもかかる国はまちがいに入れない
+      ans = sibOf(id).nm; pick = nearFirst(KUNI.filter((x) => x !== k && !x.prefs.includes(k.prefs[0])), k, R).slice(0, 3).map((x) => x.nm);
     } else if (q.kd === "k") {
       // 今のその都道府県にかからない国だけをまちがいにする
       ans = k.nm; pick = nearFirst(KUNI.filter((x) => !x.prefs.includes(k.prefs[0])), k, R).slice(0, 3).map((x) => x.nm);
@@ -58,13 +70,15 @@
     if (q.kd === "d") return { big: k.nm, sub: "五畿七道の、どこの国？" };
     if (q.kd === "k") return { big: prefName(k.prefs[0]), sub: "ここにあった国は？" };
     if (q.kd === "w") return { big: k.yomi, sub: "と読む国は？" };
+    if (q.kd === "m") return { big: k.mi, sub: "この道にあった国は？" };
+    if (q.kd === "n") return { big: k.nm, sub: `と同じ、今の${prefName(k.prefs[0])}にあった国は？` };
     return { big: k.nm, sub: "この国の読みは？（ひらがなで入力）" };
   }
   // 1問：tag は「難しさ:問題の id|モードと日付…」
   function make(tag) {
     const m = String(tag).match(/^([012]):([a-z]\d+)\|/); if (!m || !QBY[m[2]] || QBY[m[2]].lv !== +m[1]) throw new Error("知らない問題 " + tag);
     const q = QBY[m[2]], k = BY[q.no], opts = optsOf(q.id), A = ask(q);
-    const ans = q.kd === "y" ? -1 : opts.indexOf(q.kd === "p" ? prefName(k.prefs[0]) : q.kd === "d" ? k.mi : k.nm);
+    const ans = q.kd === "y" ? -1 : opts.indexOf(q.kd === "p" ? prefName(k.prefs[0]) : q.kd === "d" ? k.mi : q.kd === "n" ? sibOf(q.id).nm : k.nm);
     return { tag, lv: q.lv, id: q.id, kd: q.kd, input: q.kd === "y", p: k, opts, ans, big: A.big, sub: A.sub };
   }
   // 入力の答え：全角・半角・カタカナ・空白をそろえて読みと比べる
