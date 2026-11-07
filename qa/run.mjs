@@ -19,7 +19,7 @@ const req = createRequire(import.meta.url);
 const KUNI = req(path.join(root, "data.js"));
 const G = req(path.join(root, "game.js"));
 const idOf = (t) => t.split("|")[0].split(":")[1];
-{ let ng = false; try { G.make("0:y2|x2026-11-07"); } catch (e) { ng = true; } check("難しさと問題の合わないタグは作らない", ng); }
+{ let ng = false; const yid = G.POOL[2].find((x) => G.QBY[x].kd === "y"); try { G.make(`0:${yid}|x2026-11-07`); } catch (e) { ng = true; } check("難しさと問題の合わないタグは作らない（実在する問題で）", !!yid && ng); }
 
 // ---- 1. 国のデータと問題（ブラウザを使わない）----
 {
@@ -59,7 +59,17 @@ const idOf = (t) => t.split("|")[0].split(":")[1];
   }
   check(`問題（${G.QS.length}）：選び肢は4つ・答えはちょうど1つ・その国がかかる県／その県にかかる国／同じ読みの国はまちがいに入れない・入力の問題は国の字を出す`, bad.length === 0, bad.slice(0, 5).join(" / "));
   check("答えの場所は1〜4番に散らばる（どこも15%以上）", pos.every((n) => n / pos.reduce((a, b) => a + b, 0) > 0.15), String(pos));
-  check("問題の数：やさしい136・ふつう136・むずかしい68（300問より多い）", G.POOL.map((x) => x.length).join() === "136,136,68" && G.QS.length >= 300);
+  check("問題の数：やさしい136・ふつう204（道から国68を足した）・むずかしい115（同じ県の国47を足した）", G.POOL.map((x) => x.length).join() === "136,204,115" && G.QS.length >= 300);
+  { // 道から国（m）：選び肢のうちその道の国は答えだけ。同じ県の国（n）：今のその都道府県にかかる国は答えだけで、答えは問いの国とおもな所が同じ別の国
+    const bad = [];
+    for (const q of G.QS.filter((x) => x.kd === "m" || x.kd === "n")) {
+      const P = G.make(`${q.lv}:${q.id}|x2027-01-01`), K = P.opts.map((n) => G.KUNI.find((x) => x.nm === n));
+      if (P.opts.length !== 4 || new Set(P.opts).size !== 4 || P.ans < 0 || K.some((x) => !x)) bad.push(q.id + " 形");
+      else if (q.kd === "m" && K.filter((x) => x.mi === P.p.mi).length !== 1) bad.push(q.id);
+      else if (q.kd === "n" && (K.filter((x) => x.prefs.includes(P.p.prefs[0])).length !== 1 || K[P.ans].prefs[0] !== P.p.prefs[0] || K[P.ans] === P.p)) bad.push(q.id);
+    }
+    check("道から国・同じ県の国：正しい国は1つだけ（ほかの3つは別の道・その県にかからない国）", bad.length === 0, bad.slice(0, 5).join());
+  }
   const long = [];
   for (const q of G.QS) for (const f of [...G.facts(G.make(`${q.lv}:${q.id}|q2027-01-01`)), G.make(`${q.lv}:${q.id}|q2027-01-01`).sub]) if ([...f].length > 60) long.push(q.id + ":" + f);
   check("説明・問いは1行60字以内（一画面一問）", long.length === 0, long.slice(0, 3).join(" / "));
@@ -247,7 +257,7 @@ try {
   await p.click("#next");
   {
     const P2 = G.make(tags[2]);
-    check("ふつうの問いは今の都道府県か読み（国の字は選び肢）", (await p.textContent("#yomi")).includes(P2.big) && ["k", "w"].includes(P2.kd));
+    check("ふつうの問いは今の都道府県・読み・五畿七道（国の字は選び肢）", (await p.textContent("#yomi")).includes(P2.big) && ["k", "w", "m"].includes(P2.kd));
     await p.click("#hint"); await p.click("#hint");
     await p.reload(); await p.waitForTimeout(150); await p.click("#go-d");
     check("ヒントを使ったあと開き直しても、外した選び肢のまま", await p.locator("#pick button.cut").count() === 2);
@@ -475,7 +485,7 @@ try {
   {
     // 読みを入れる画面も、幅320pxで欄とボタンが横に並んではみ出さない
     const q = await newPage(320); await closeHow(q);
-    const yid = G.POOL[2].slice().sort((x, y) => G.BY[G.QBY[y].no].yomi.length - G.BY[G.QBY[x].no].yomi.length)[0];
+    const yid = G.POOL[2].filter((x) => G.QBY[x].kd === "y").sort((x, y) => G.BY[G.QBY[y].no].yomi.length - G.BY[G.QBY[x].no].yomi.length)[0];
     await q.evaluate((tag) => { const s = JSON.parse(localStorage.getItem("kyukoku-v1")); s.runs.p = { mode: "p", date: __ky.todayKey(), list: [tag, tag, tag, tag, tag], res: [], cur: null, id: "L" }; localStorage.setItem("kyukoku-v1", JSON.stringify(s)); __ky.play("p"); }, `2:${yid}|p${TODAY}`);
     await q.fill("#ans", G.BY[G.QBY[yid].no].yomi);
     const r = await q.evaluate(() => { const a = document.getElementById("ans").getBoundingClientRect(), b = document.getElementById("go").getBoundingClientRect(); return [a.width, a.height, b.right <= innerWidth, document.documentElement.scrollWidth - document.documentElement.clientWidth]; });
