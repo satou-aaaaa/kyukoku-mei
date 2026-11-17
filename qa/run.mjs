@@ -149,8 +149,11 @@ const url = `http://127.0.0.1:${server.address().port}/`;
 const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
 const errors = [];
 // 「今日」をずらして遊ぶ（第1回の日から日がたっていなくても、あとから・カレンダーを確かめる）。QA_SHIFT_DAYS で変えられる
-const SHIFT = +(process.env.QA_SHIFT_DAYS || 10);
-const TODAY = new Date(Date.now() + SHIFT * 864e5 + 9 * 3600e3).toISOString().slice(0, 10);
+// むずかしいは読みの入力（y）と選び肢（n、2026-11-07 から）がある。下の検査は5問目が読みの入力の日で通すので、QA_SHIFT_DAYS が無いときは10日先から、5問目が読みの入力になる日まで進める（日によって落ちないように。2026-11-17）
+const dayOf = (n) => new Date(Date.now() + n * 864e5 + 9 * 3600e3).toISOString().slice(0, 10);
+let SHIFT = +(process.env.QA_SHIFT_DAYS || 10);
+if (!process.env.QA_SHIFT_DAYS) while (!G.make(G.dailyTags(dayOf(SHIFT))[4]).input) SHIFT++;
+const TODAY = dayOf(SHIFT);
 // 検査の間に日本時間の0時をまたがないよう、ブラウザの時刻は TODAY の正午（日本時間）から進める
 const NOON = Date.parse(TODAY + "T03:00:00Z");
 const dayBefore = (n) => new Date(Date.parse(TODAY) - n * 864e5).toISOString().slice(0, 10);
